@@ -9,3 +9,6 @@
 *.tlog
 rnc32
 rnc64
+
+/.idea
+/rnc_test/x64
