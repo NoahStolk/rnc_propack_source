@@ -128,27 +128,9 @@ static const uint16 crc_table[] = {
     0x8201, 0x42C0, 0x4380, 0x8341, 0x4100, 0x81C1, 0x8081, 0x4040
 };
 
-uint8 peek_byte(uint8 *buf, size_t offset)
-{
-    return buf[offset];
-}
-
 uint8 read_byte(uint8 *buf, size_t *offset)
 {
     return buf[(*offset)++];
-}
-
-void write_byte(uint8 *buf, size_t *offset, uint8 b)
-{
-    buf[(*offset)++] = b;
-}
-
-uint16 peek_word_be(uint8 *buf, size_t offset)
-{
-    uint8 b1 = peek_byte(buf, offset + 0);
-    uint8 b2 = peek_byte(buf, offset + 1);
-
-    return (b1 << 8) | b2;
 }
 
 uint16 read_word_be(uint8 *buf, size_t *offset)
@@ -602,8 +584,7 @@ int do_unpack_data(vars_t *v)
     uint16 specified_key = v->enc_key;
 
     int error_code = 0;
-    if (input_bits(v, 1) && v->puse_mode == 'p')
-        error_code = 9;
+    input_bits(v, 1);
 
     if (!error_code)
     {
@@ -615,8 +596,8 @@ int do_unpack_data(vars_t *v)
     {
         switch (v->method)
         {
-        case 1: error_code = unpack_data_m1(v); break;
-        case 2: error_code = unpack_data_m2(v); break;
+            case 1: error_code = unpack_data_m1(v); break;
+            case 2: error_code = unpack_data_m2(v); break;
         }
     }
 
@@ -687,20 +668,9 @@ int main(int argc, char *argv[])
     v->temp = (uint8*)malloc(MAX_BUF_SIZE);
 
     int error_code = do_unpack(v);
-
-    if (!error_code && v->puse_mode != 's' && v->puse_mode != 'e')
+    if (!error_code)
     {
-        FILE *out;
-        if (argc <= 3 || ((argv[3][0] == '-') || (argv[3][0] == '/')))
-        {
-            char out_name[256];
-            snprintf(out_name, sizeof(out_name), "%s.%.6zx.bin", argv[2], v->read_start_offset);
-
-            out = fopen(out_name, "wb");
-        }
-        else
-            out = fopen(argv[3], "wb");
-
+        FILE *out = fopen(argv[3], "wb");
         if (out == NULL)
         {
             free(v->input);
@@ -719,14 +689,14 @@ int main(int argc, char *argv[])
     }
     else {
         switch (error_code) {
-        case 0: break;
-        case 4: printf("Corrupted input data.\n"); break;
-        case 5: printf("CRC check failed.\n"); break;
-        case 6:
-        case 7: printf("Wrong RNC header.\n"); break;
-        case 10: printf("Decryption key required.\n"); break;
-        case 11: printf("No RNC archives were found.\n"); break;
-        default: printf("Cannot process file. Error code: %x\n", error_code); break;
+            case 0: break;
+            case 4: printf("Corrupted input data.\n"); break;
+            case 5: printf("CRC check failed.\n"); break;
+            case 6:
+            case 7: printf("Wrong RNC header.\n"); break;
+            case 10: printf("Decryption key required.\n"); break;
+            case 11: printf("No RNC archives were found.\n"); break;
+            default: printf("Cannot process file. Error code: %x\n", error_code); break;
         }
     }
 
