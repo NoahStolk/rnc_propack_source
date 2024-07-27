@@ -26,7 +26,8 @@ typedef unsigned short uint16;
 typedef unsigned int uint32;
 
 #pragma pack(push, 1)
-typedef struct huftable_s {
+typedef struct huftable_s
+{
     uint32 l1; // +0
     uint16 l2; // +4
     uint32 l3; // +6
@@ -35,7 +36,8 @@ typedef struct huftable_s {
 
 #pragma pack(pop)
 
-typedef struct vars_s {
+typedef struct vars_s
+{
     uint16 max_matches;
     uint16 enc_key;
     uint32 pack_block_size;
@@ -67,17 +69,17 @@ typedef struct vars_s {
     uint32 leeway;
     uint32 chunks_count;
 
-    uint8 *mem1;
-    uint8 *pack_block_start;
-    uint8 *pack_block_max;
-    uint8 *pack_block_end;
-    uint16 *mem2;
-    uint16 *mem3;
-    uint16 *mem4;
-    uint16 *mem5;
+    uint8* mem1;
+    uint8* pack_block_start;
+    uint8* pack_block_max;
+    uint8* pack_block_end;
+    uint16* mem2;
+    uint16* mem3;
+    uint16* mem4;
+    uint16* mem5;
 
-    uint8 *decoded;
-    uint8 *window;
+    uint8* decoded;
+    uint8* window;
 
     size_t read_start_offset, write_start_offset;
     uint8 *input, *output, *temp;
@@ -128,70 +130,70 @@ static const uint16 crc_table[] = {
     0x8201, 0x42C0, 0x4380, 0x8341, 0x4100, 0x81C1, 0x8081, 0x4040
 };
 
-uint8 read_byte(uint8 *buf, size_t *offset)
+uint8 read_byte(uint8* buf, size_t* offset)
 {
     return buf[(*offset)++];
 }
 
-uint16 read_word_be(uint8 *buf, size_t *offset)
+uint16 read_word_be(uint8* buf, size_t* offset)
 {
     uint8 b1 = read_byte(buf, offset);
     uint8 b2 = read_byte(buf, offset);
 
-    return (b1 << 8) | b2;
+    return b1 << 8 | b2;
 }
 
-uint32 read_dword_be(uint8 *buf, size_t *offset)
+uint32 read_dword_be(uint8* buf, size_t* offset)
 {
     uint16 w1 = read_word_be(buf, offset);
     uint16 w2 = read_word_be(buf, offset);
 
-    return (w1 << 16) | w2;
+    return w1 << 16 | w2;
 }
 
-void read_buf(uint8 *dest, uint8 *source, size_t *offset, int size)
+void read_buf(uint8* dest, uint8* source, size_t* offset, int size)
 {
     memmove(dest, &source[*offset], size);
     *offset += size;
 }
 
-void write_buf(uint8 *dest, size_t *offset, uint8 *source, int size)
+void write_buf(uint8* dest, size_t* offset, uint8* source, int size)
 {
     memmove(&dest[*offset], source, size);
     *offset += size;
 }
 
-uint16 crc_block(uint8 *buf, size_t offset, int size)
+uint16 crc_block(uint8* buf, size_t offset, int size)
 {
     uint16 crc = 0;
 
     while (size--)
     {
         crc ^= read_byte(buf, &offset);
-        crc = (crc >> 8) ^ crc_table[crc & 0xFF];
+        crc = crc >> 8 ^ crc_table[crc & 0xFF];
     }
 
     return crc;
 }
 
-void ror_w(uint16 *x)
+void ror_w(uint16* x)
 {
     if (*x & 1)
-        *x = 0x8000 | (*x >> 1);
+        *x = 0x8000 | *x >> 1;
     else
         *x >>= 1;
 }
 
-vars_t *init_vars()
+vars_t* init_vars(void)
 {
-    vars_t *v = (vars_t*)malloc(sizeof(vars_t));
+    vars_t* v = malloc(sizeof(vars_t));
     v->enc_key = 0;
     v->max_matches = 0x1000;
     v->unpacked_crc_real = 0;
     v->pack_block_size = 0x3000;
-    v->dict_size = 0xFFFF;
+    v->dict_size = 0x8000;
     v->method = 1;
-    v->puse_mode = 'p';
+    v->puse_mode = 'u';
 
     v->read_start_offset = 0;
     v->write_start_offset = 0;
@@ -207,7 +209,7 @@ vars_t *init_vars()
     return v;
 }
 
-void clear_table(huftable_t *data, int count)
+void clear_table(huftable_t* data, int count)
 {
     for (int i = 0; i < count; ++i)
     {
@@ -234,7 +236,7 @@ uint32 inverse_bits(uint32 value, int count)
     return i;
 }
 
-void proc_20(huftable_t *data, int count)
+void proc_20(huftable_t* data, int count)
 {
     int val = 0;
     uint32 div = 0x80000000;
@@ -264,7 +266,7 @@ void proc_20(huftable_t *data, int count)
     }
 }
 
-uint8 read_source_byte(vars_t *v)
+uint8 read_source_byte(vars_t* v)
 {
     if (v->pack_block_start == &v->mem1[0xFFFD])
     {
@@ -292,7 +294,7 @@ uint8 read_source_byte(vars_t *v)
     return *v->pack_block_start++;
 }
 
-uint32 input_bits_m2(vars_t *v, short count)
+uint32 input_bits_m2(vars_t* v, short count)
 {
     uint32 bits = 0;
 
@@ -316,7 +318,7 @@ uint32 input_bits_m2(vars_t *v, short count)
     return bits;
 }
 
-uint32 input_bits_m1(vars_t *v, short count)
+uint32 input_bits_m1(vars_t* v, short count)
 {
     uint32 bits = 0;
     uint32 prev_bits = 1;
@@ -327,7 +329,7 @@ uint32 input_bits_m1(vars_t *v, short count)
         {
             uint8 b1 = read_source_byte(v);
             uint8 b2 = read_source_byte(v);
-            v->bit_buffer = (v->pack_block_start[1] << 24) | (v->pack_block_start[0] << 16) | (b2 << 8) | b1;
+            v->bit_buffer = v->pack_block_start[1] << 24 | v->pack_block_start[0] << 16 | b2 << 8 | b1;
 
             v->bit_count = 16;
         }
@@ -343,7 +345,7 @@ uint32 input_bits_m1(vars_t *v, short count)
     return bits;
 }
 
-int input_bits(vars_t *v, short count)
+int input_bits(vars_t* v, short count)
 {
     if (v->method != 2)
         return input_bits_m1(v, count);
@@ -351,15 +353,15 @@ int input_bits(vars_t *v, short count)
     return input_bits_m2(v, count);
 }
 
-void decode_match_count(vars_t *v)
+void decode_match_count(vars_t* v)
 {
     v->match_count = input_bits_m2(v, 1) + 4;
 
     if (input_bits_m2(v, 1))
-        v->match_count = ((v->match_count - 1) << 1) + input_bits_m2(v, 1);
+        v->match_count = (v->match_count - 1 << 1) + input_bits_m2(v, 1);
 }
 
-void decode_match_offset(vars_t *v)
+void decode_match_offset(vars_t* v)
 {
     v->match_offset = 0;
     if (input_bits_m2(v, 1))
@@ -368,19 +370,19 @@ void decode_match_offset(vars_t *v)
 
         if (input_bits_m2(v, 1))
         {
-            v->match_offset = ((v->match_offset << 1) | input_bits_m2(v, 1)) | 4;
+            v->match_offset = v->match_offset << 1 | input_bits_m2(v, 1) | 4;
 
             if (!input_bits_m2(v, 1))
-                v->match_offset = (v->match_offset << 1) | input_bits_m2(v, 1);
+                v->match_offset = v->match_offset << 1 | input_bits_m2(v, 1);
         }
         else if (!v->match_offset)
             v->match_offset = input_bits_m2(v, 1) + 2;
     }
 
-    v->match_offset = ((v->match_offset << 8) | read_source_byte(v)) + 1;
+    v->match_offset = (v->match_offset << 8 | read_source_byte(v)) + 1;
 }
 
-void write_decoded_byte(vars_t *v, uint8 b)
+void write_decoded_byte(vars_t* v, uint8 b)
 {
     if (&v->decoded[0xFFFF] == v->window)
     {
@@ -390,10 +392,10 @@ void write_decoded_byte(vars_t *v, uint8 b)
     }
 
     *v->window++ = b;
-    v->unpacked_crc_real = crc_table[(v->unpacked_crc_real ^ b) & 0xFF] ^ (v->unpacked_crc_real >> 8);
+    v->unpacked_crc_real = crc_table[(v->unpacked_crc_real ^ b) & 0xFF] ^ v->unpacked_crc_real >> 8;
 }
 
-int unpack_data_m2(vars_t *v)
+int unpack_data_m2(vars_t* v)
 {
     while (v->processed_size < v->input_size)
     {
@@ -470,7 +472,7 @@ int unpack_data_m2(vars_t *v)
     return 0;
 }
 
-void make_huftable(vars_t *v, huftable_t *data, int count)
+void make_huftable(vars_t* v, huftable_t* data, int count)
 {
     clear_table(data, count);
 
@@ -488,27 +490,27 @@ void make_huftable(vars_t *v, huftable_t *data, int count)
     }
 }
 
-uint32 decode_table_data(vars_t *v, huftable_t *data)
+uint32 decode_table_data(vars_t* v, huftable_t* data)
 {
     uint32 i = 0;
 
     while (1)
     {
-        if (data[i].bit_depth && (data[i].l3 == (v->bit_buffer & ((1 << data[i].bit_depth) - 1))))
+        if (data[i].bit_depth && data[i].l3 == (v->bit_buffer & (1 << data[i].bit_depth) - 1))
         {
             input_bits_m1(v, data[i].bit_depth);
 
             if (i < 2)
                 return i;
 
-            return input_bits_m1(v, i - 1) | (1 << (i - 1));
+            return input_bits_m1(v, i - 1) | 1 << i - 1;
         }
 
         i++;
     }
 }
 
-int unpack_data_m1(vars_t *v)
+int unpack_data_m1(vars_t* v)
 {
     while (v->processed_size < v->input_size)
     {
@@ -530,7 +532,7 @@ int unpack_data_m1(vars_t *v)
 
                 ror_w(&v->enc_key);
 
-                v->bit_buffer = (((v->pack_block_start[2] << 16) | (v->pack_block_start[1] << 8) | v->pack_block_start[0]) << v->bit_count) | (v->bit_buffer & ((1 << v->bit_count) - 1));
+                v->bit_buffer = (v->pack_block_start[2] << 16 | v->pack_block_start[1] << 8 | v->pack_block_start[0]) << v->bit_count | v->bit_buffer & (1 << v->bit_count) - 1;
             }
 
             if (subchunks)
@@ -549,12 +551,12 @@ int unpack_data_m1(vars_t *v)
     return 0;
 }
 
-int do_unpack_data(vars_t *v)
+int do_unpack_data(vars_t* v)
 {
     int start_pos = v->input_offset;
 
     uint32 sign = read_dword_be(v->input, &v->input_offset);
-    if ((sign >> 8) != RNC_SIGN)
+    if (sign >> 8 != RNC_SIGN)
         return 6;
 
     v->method = sign & 3;
@@ -565,8 +567,8 @@ int do_unpack_data(vars_t *v)
     v->unpacked_crc = read_word_be(v->input, &v->input_offset);
     v->packed_crc = read_word_be(v->input, &v->input_offset);
 
-    /*v->leeway = */read_byte(v->input, &v->input_offset);
-    /*v->chunks_count = */read_byte(v->input, &v->input_offset);
+    /*v->leeway = */ read_byte(v->input, &v->input_offset);
+    /*v->chunks_count = */ read_byte(v->input, &v->input_offset);
 
     if (crc_block(v->input, v->input_offset, v->packed_size) != v->packed_crc)
         return 4;
@@ -596,8 +598,8 @@ int do_unpack_data(vars_t *v)
     {
         switch (v->method)
         {
-            case 1: error_code = unpack_data_m1(v); break;
-            case 2: error_code = unpack_data_m2(v); break;
+        case 1: error_code = unpack_data_m1(v); break;
+        case 2: error_code = unpack_data_m2(v); break;
         }
     }
 
@@ -617,7 +619,7 @@ int do_unpack_data(vars_t *v)
     return 0;
 }
 
-int do_unpack(vars_t *v)
+int do_unpack(vars_t* v)
 {
     v->packed_size = v->file_size;
 
@@ -627,30 +629,14 @@ int do_unpack(vars_t *v)
     return do_unpack_data(v); // data
 }
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
-    argc = 4;
     argv[1] = "u";
     argv[2] = "E:\\repos-external\\rnc_propack_source\\CRATES.GSC";
     argv[3] = "E:\\repos-external\\rnc_propack_source\\CRATES.NUS";
 
-    vars_t *v = init_vars();
-    v->puse_mode = 'u';
-
-    if (v->method == 1)
-    {
-        if (v->dict_size > 0x8000)
-            v->dict_size = 0x8000;
-        v->max_matches = 0x1000;
-    }
-    else if (v->method == 2)
-    {
-        if (v->dict_size > 0x1000)
-            v->dict_size = 0x1000;
-        v->max_matches = 0xFF;
-    }
-
-    FILE *in = fopen(argv[2], "rb");
+    vars_t* v = init_vars();
+    FILE* in = fopen(argv[2], "rb");
     if (in == NULL)
     {
         free(v);
@@ -670,7 +656,7 @@ int main(int argc, char *argv[])
     int error_code = do_unpack(v);
     if (!error_code)
     {
-        FILE *out = fopen(argv[3], "wb");
+        FILE* out = fopen(argv[3], "wb");
         if (out == NULL)
         {
             free(v->input);
@@ -684,19 +670,27 @@ int main(int argc, char *argv[])
         fwrite(v->output, v->output_offset, 1, out);
         fclose(out);
 
-        printf("File successfully %s!\n", ((v->puse_mode == 'p') ? "packed" : "unpacked"));
-        printf("Original/new size: %d/%zd bytes\n", (v->puse_mode == 'u') ? (v->packed_size + RNC_HEADER_SIZE) : v->file_size, v->output_offset);
+        printf("File successfully %s!\n", v->puse_mode == 'p' ? "packed" : "unpacked");
+        printf("Original/new size: %d/%zd bytes\n",
+               v->puse_mode == 'u' ? v->packed_size + RNC_HEADER_SIZE : v->file_size, v->output_offset);
     }
-    else {
-        switch (error_code) {
-            case 0: break;
-            case 4: printf("Corrupted input data.\n"); break;
-            case 5: printf("CRC check failed.\n"); break;
-            case 6:
-            case 7: printf("Wrong RNC header.\n"); break;
-            case 10: printf("Decryption key required.\n"); break;
-            case 11: printf("No RNC archives were found.\n"); break;
-            default: printf("Cannot process file. Error code: %x\n", error_code); break;
+    else
+    {
+        switch (error_code)
+        {
+        case 4: printf("Corrupted input data.\n");
+            break;
+        case 5: printf("CRC check failed.\n");
+            break;
+        case 6:
+        case 7: printf("Wrong RNC header.\n");
+            break;
+        case 10: printf("Decryption key required.\n");
+            break;
+        case 11: printf("No RNC archives were found.\n");
+            break;
+        default: printf("Cannot process file. Error code: %x\n", error_code);
+            break;
         }
     }
 
