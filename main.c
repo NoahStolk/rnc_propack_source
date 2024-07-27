@@ -7,7 +7,6 @@
 #include <sys/stat.h>
 #else
 #include <direct.h>
-#define mkdir(name, mode) mkdir(name)
 #endif
 
 #ifndef _countof
@@ -130,40 +129,40 @@ static const uint16 crc_table[] = {
     0x8201, 0x42C0, 0x4380, 0x8341, 0x4100, 0x81C1, 0x8081, 0x4040
 };
 
-uint8 read_byte(uint8* buf, size_t* offset)
+uint8 read_byte(const uint8* buf, size_t* offset)
 {
     return buf[(*offset)++];
 }
 
-uint16 read_word_be(uint8* buf, size_t* offset)
+uint16 read_word_be(const uint8* buf, size_t* offset)
 {
-    uint8 b1 = read_byte(buf, offset);
-    uint8 b2 = read_byte(buf, offset);
+    const uint8 b1 = read_byte(buf, offset);
+    const uint8 b2 = read_byte(buf, offset);
 
     return b1 << 8 | b2;
 }
 
-uint32 read_dword_be(uint8* buf, size_t* offset)
+uint32 read_dword_be(const uint8* buf, size_t* offset)
 {
-    uint16 w1 = read_word_be(buf, offset);
-    uint16 w2 = read_word_be(buf, offset);
+    const uint16 w1 = read_word_be(buf, offset);
+    const uint16 w2 = read_word_be(buf, offset);
 
     return w1 << 16 | w2;
 }
 
-void read_buf(uint8* dest, uint8* source, size_t* offset, int size)
+void read_buf(uint8* dest, const uint8* source, size_t* offset, const int size)
 {
     memmove(dest, &source[*offset], size);
     *offset += size;
 }
 
-void write_buf(uint8* dest, size_t* offset, uint8* source, int size)
+void write_buf(uint8* dest, size_t* offset, const uint8* source, const int size)
 {
     memmove(&dest[*offset], source, size);
     *offset += size;
 }
 
-uint16 crc_block(uint8* buf, size_t offset, int size)
+uint16 crc_block(const uint8* buf, size_t offset, int size)
 {
     uint16 crc = 0;
 
@@ -209,7 +208,7 @@ vars_t* init_vars(void)
     return v;
 }
 
-void clear_table(huftable_t* data, int count)
+void clear_table(huftable_t* data, const int count)
 {
     for (int i = 0; i < count; ++i)
     {
@@ -236,7 +235,7 @@ uint32 inverse_bits(uint32 value, int count)
     return i;
 }
 
-void proc_20(huftable_t* data, int count)
+void proc_20(huftable_t* data, const int count)
 {
     int val = 0;
     uint32 div = 0x80000000;
@@ -327,8 +326,8 @@ uint32 input_bits_m1(vars_t* v, short count)
     {
         if (!v->bit_count)
         {
-            uint8 b1 = read_source_byte(v);
-            uint8 b2 = read_source_byte(v);
+            const uint8 b1 = read_source_byte(v);
+            const uint8 b2 = read_source_byte(v);
             v->bit_buffer = v->pack_block_start[1] << 24 | v->pack_block_start[0] << 16 | b2 << 8 | b1;
 
             v->bit_count = 16;
@@ -345,7 +344,7 @@ uint32 input_bits_m1(vars_t* v, short count)
     return bits;
 }
 
-int input_bits(vars_t* v, short count)
+uint32 input_bits(vars_t* v, const short count)
 {
     if (v->method != 2)
         return input_bits_m1(v, count);
@@ -382,7 +381,7 @@ void decode_match_offset(vars_t* v)
     v->match_offset = (v->match_offset << 8 | read_source_byte(v)) + 1;
 }
 
-void write_decoded_byte(vars_t* v, uint8 b)
+void write_decoded_byte(vars_t* v, const uint8 b)
 {
     if (&v->decoded[0xFFFF] == v->window)
     {
@@ -472,7 +471,7 @@ int unpack_data_m2(vars_t* v)
     return 0;
 }
 
-void make_huftable(vars_t* v, huftable_t* data, int count)
+void make_huftable(vars_t* v, huftable_t* data, const int count)
 {
     clear_table(data, count);
 
@@ -490,7 +489,7 @@ void make_huftable(vars_t* v, huftable_t* data, int count)
     }
 }
 
-uint32 decode_table_data(vars_t* v, huftable_t* data)
+uint32 decode_table_data(vars_t* v, const huftable_t* data)
 {
     uint32 i = 0;
 
@@ -553,9 +552,9 @@ int unpack_data_m1(vars_t* v)
 
 int do_unpack_data(vars_t* v)
 {
-    int start_pos = v->input_offset;
+    const int start_pos = v->input_offset;
 
-    uint32 sign = read_dword_be(v->input, &v->input_offset);
+    const uint32 sign = read_dword_be(v->input, &v->input_offset);
     if (sign >> 8 != RNC_SIGN)
         return 6;
 
@@ -583,7 +582,7 @@ int do_unpack_data(vars_t* v)
     v->bit_buffer = 0;
     v->processed_size = 0;
 
-    uint16 specified_key = v->enc_key;
+    const uint16 specified_key = v->enc_key;
 
     int error_code = 0;
     input_bits(v, 1);
@@ -653,7 +652,7 @@ int main(int argc, char* argv[])
     v->output = (uint8*)malloc(MAX_BUF_SIZE);
     v->temp = (uint8*)malloc(MAX_BUF_SIZE);
 
-    int error_code = do_unpack(v);
+    const int error_code = do_unpack(v);
     if (!error_code)
     {
         FILE* out = fopen(argv[3], "wb");
