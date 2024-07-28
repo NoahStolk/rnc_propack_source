@@ -52,7 +52,8 @@ public class Program
     private const int RNC_HEADER_SIZE = 0x12;
     private const int MAX_BUF_SIZE = 0x1E00000;
 
-    private static readonly ushort[] CrcTable = {
+    private static readonly ushort[] CrcTable =
+    {
         0x0000, 0xC0C1, 0xC181, 0x0140, 0xC301, 0x03C0, 0x0280, 0xC241,
         0xC601, 0x06C0, 0x0780, 0xC741, 0x0500, 0xC5C1, 0xC481, 0x0440,
         0xCC01, 0x0CC0, 0x0D80, 0xCD41, 0x0F00, 0xCFC1, 0xCE81, 0x0E40,
@@ -126,6 +127,7 @@ public class Program
             crc ^= ReadByte(buf, ref offset);
             crc = (ushort)(crc >> 8 ^ CrcTable[crc & 0xFF]);
         }
+
         return crc;
     }
 
@@ -190,6 +192,7 @@ public class Program
             v.BitBuffer <<= 1;
             v.BitCount--;
         }
+
         return bits;
     }
 
@@ -215,6 +218,7 @@ public class Program
             else if (v.MatchOffset == 0)
                 v.MatchOffset = (ushort)(InputBitsM2(v, 1) + 2);
         }
+
         v.MatchOffset = (ushort)((v.MatchOffset << 8 | ReadSourceByte(v)) + 1);
     }
 
@@ -262,6 +266,7 @@ public class Program
                             {
                                 v.MatchCount = 3;
                             }
+
                             DecodeMatchOffset(v);
                         }
                         else
@@ -269,6 +274,7 @@ public class Program
                             v.MatchCount = 2;
                             v.MatchOffset = (ushort)(ReadSourceByte(v) + 1);
                         }
+
                         v.ProcessedSize += v.MatchCount;
                         while (v.MatchCount-- > 0)
                             WriteDecodedByte(v, v.Window[v.Window - v.MatchOffset]);
@@ -295,6 +301,7 @@ public class Program
                 }
             }
         }
+
         WriteBuf(v.Output, ref v.OutputOffset, v.Decoded, v.Window - v.Decoded[v.DictSize]);
         return 0;
     }
@@ -323,4 +330,118 @@ public class Program
         v.Mem1 = new byte[0xFFFF];
         v.Decoded = new byte[0xFFFF];
         v.PackBlockStart = v.Mem1[0xFFFD];
-        v.Window = v.Decoded[v
+        v.Window = v.Decoded[v.DictSize];
+
+        v.UnpackedCrcReal = 0;
+        v.BitCount = 0;
+        v.BitBuffer = 0;
+        v.ProcessedSize = 0;
+
+        ushort specifiedKey = v.EncKey;
+
+        ErrorCodes errorCode = 0;
+        InputBitsM2(v, 1);
+
+        if (errorCode == 0)
+        {
+            if (InputBitsM2(v, 1) != 0 && v.EncKey == 0) // key is needed, but not specified as argument
+                errorCode = ErrorCodes.DecryptionKeyRequired;
+        }
+
+        if (errorCode == 0)
+        {
+            switch (v.Method)
+            {
+                case 2:
+                    errorCode = (ErrorCodes)UnpackDataM2(v);
+                    break;
+            }
+        }
+
+        v.EncKey = specifiedKey;
+
+        v.InputOffset = startPos + v.PackedSize + RNC_HEADER_SIZE;
+
+        if (errorCode != 0)
+            return errorCode;
+
+        if (v.UnpackedCrc != v.UnpackedCrcReal)
+            return ErrorCodes.CrcCheckFailed;
+
+        return ErrorCodes.None;
+    }
+    
+    private static ErrorCodes DoUnpack(Vars v)
+    {
+        v.PackedSize = v.FileSize;
+
+        if (v.FileSize < RNC_HEADER_SIZE)
+            return ErrorCodes.WrongRncHeader;
+
+        return DoUnpackData(v);
+    }
+
+    public static void Main(string[] args)
+    {
+        args = new string[] { "u", "E:\\repos-external\\rnc_propack_source\\CRATES.GSC", "E:\\repos-external\\rnc_propack_source\\CRATES.NUS" };
+
+        Vars v = InitVars();
+        v.ReadStartOffset = 0;
+        v.InputOffset = 0;
+        v.OutputOffset = 0;
+
+        try
+        {
+            using (FileStream inFile = new FileStream(args[1], FileMode.Open, FileAccess.Read))
+            {
+                v.FileSize = (uint)(inFile.Length - v.ReadStartOffset);
+                v.Input = new byte[v.FileSize];
+                inFile.Seek(v.ReadStartOffset, SeekOrigin.Begin);
+                inFile.Read(v.Input, 0, (int)v.FileSize);
+            }
+
+            v.Output = new byte[MAX_BUF_SIZE];
+
+            ErrorCodes errorCode = DoUnpack(v);
+            if (errorCode == ErrorCodes.None)
+            {
+                using (FileStream outFile = new FileStream(args[2], FileMode.Create, FileAccess.Write))
+                {
+                    outFile.Write(v.Output, 0, (int)v.OutputOffset);
+                }
+
+                Console.WriteLine("File successfully unpacked!");
+                Console.WriteLine($"Original/new size: {v.PackedSize + RNC_HEADER_SIZE}/{v.OutputOffset} bytes");
+            }
+            else
+            {
+                switch (errorCode)
+                {
+                    case ErrorCodes.CorruptedInputData:
+                        Console.WriteLine("Corrupted input data.");
+                        break;
+                    case ErrorCodes.CrcCheckFailed:
+                        Console.WriteLine("CRC check failed.");
+                        break;
+                    case ErrorCodes.WrongRncHeader:
+                    case ErrorCodes.WrongRncHeader2:
+                        Console.WriteLine("Wrong RNC header.");
+                        break;
+                    case ErrorCodes.DecryptionKeyRequired:
+                        Console.WriteLine("Decryption key required.");
+                        break;
+                    case ErrorCodes.NoRncArchivesWereFound:
+                        Console.WriteLine("No RNC archives were found.");
+                        break;
+                    default:
+                        Console.WriteLine($"Cannot process file. Error code: {errorCode}");
+                        break;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+        }
+    }
+}
