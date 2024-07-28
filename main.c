@@ -57,6 +57,17 @@ typedef struct vars_s
     size_t output_offset;
 } vars_t;
 
+enum error_codes
+{
+    error_none = 0,
+    error_corrupted_input_data = 4,
+    error_crc_check_failed = 5,
+    error_wrong_rnc_header = 6,
+    error_wrong_rnc_header_2 = 7,
+    error_decryption_key_required = 10,
+    error_no_rnc_archives_were_found = 11
+};
+
 #define RNC_SIGN 0x524E43 // RNC
 #define RNC_HEADER_SIZE 0x12
 #define MAX_BUF_SIZE 0x1E00000
@@ -294,7 +305,9 @@ int unpack_data_m2(vars_t* v)
                             }
                         }
                         else
+                        {
                             v->match_count = 3;
+                        }
 
                         decode_match_offset(v);
                     }
@@ -340,19 +353,19 @@ int unpack_data_m2(vars_t* v)
     return 0;
 }
 
-int do_unpack_data(vars_t* v)
+enum error_codes do_unpack_data(vars_t* v)
 {
     const int start_pos = v->input_offset;
 
     const uint32 sign = read_dword_be(v->input, &v->input_offset);
     if (sign >> 8 != RNC_SIGN)
-        return 6;
+        return error_wrong_rnc_header;
 
     v->method = sign & 3;
     v->input_size = read_dword_be(v->input, &v->input_offset);
     v->packed_size = read_dword_be(v->input, &v->input_offset);
     if (v->file_size < v->packed_size)
-        return 7;
+        return error_wrong_rnc_header_2;
     v->unpacked_crc = read_word_be(v->input, &v->input_offset);
     v->packed_crc = read_word_be(v->input, &v->input_offset);
 
@@ -360,7 +373,7 @@ int do_unpack_data(vars_t* v)
     /*v->chunks_count = */ read_byte(v->input, &v->input_offset);
 
     if (crc_block(v->input, v->input_offset, v->packed_size) != v->packed_crc)
-        return 4;
+        return error_corrupted_input_data;
 
     v->mem1 = (uint8*)malloc(0xFFFF);
     v->decoded = (uint8*)malloc(0xFFFF);
@@ -374,13 +387,13 @@ int do_unpack_data(vars_t* v)
 
     const uint16 specified_key = v->enc_key;
 
-    int error_code = 0;
+    enum error_codes error_code = 0;
     input_bits(v, 1);
 
     if (!error_code)
     {
         if (input_bits(v, 1) && !v->enc_key) // key is needed, but not specified as argument
-            error_code = 10;
+            error_code = error_decryption_key_required;
     }
 
     if (!error_code)
@@ -402,12 +415,12 @@ int do_unpack_data(vars_t* v)
         return error_code;
 
     if (v->unpacked_crc != v->unpacked_crc_real)
-        return 5;
+        return error_crc_check_failed;
 
-    return 0;
+    return error_none;
 }
 
-int do_unpack(vars_t* v)
+enum error_codes do_unpack(vars_t* v)
 {
     v->packed_size = v->file_size;
 
@@ -440,7 +453,7 @@ int main(int argc, char* argv[])
 
     v->output = (uint8*)malloc(MAX_BUF_SIZE);
 
-    const int error_code = do_unpack(v);
+    const enum error_codes error_code = do_unpack(v);
     if (!error_code)
     {
         FILE* out = fopen(argv[3], "wb");
@@ -464,16 +477,16 @@ int main(int argc, char* argv[])
     {
         switch (error_code)
         {
-        case 4: printf("Corrupted input data.\n");
+        case error_corrupted_input_data: printf("Corrupted input data.\n");
             break;
-        case 5: printf("CRC check failed.\n");
+        case error_crc_check_failed: printf("CRC check failed.\n");
             break;
-        case 6:
-        case 7: printf("Wrong RNC header.\n");
+        case error_wrong_rnc_header:
+        case error_wrong_rnc_header_2: printf("Wrong RNC header.\n");
             break;
-        case 10: printf("Decryption key required.\n");
+        case error_decryption_key_required: printf("Decryption key required.\n");
             break;
-        case 11: printf("No RNC archives were found.\n");
+        case error_no_rnc_archives_were_found: printf("No RNC archives were found.\n");
             break;
         default: printf("Cannot process file. Error code: %x\n", error_code);
             break;
