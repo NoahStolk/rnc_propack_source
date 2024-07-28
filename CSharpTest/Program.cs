@@ -1,6 +1,4 @@
-﻿using System;
-using System.IO;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 
 public class Vars
 {
@@ -43,7 +41,7 @@ public enum ErrorCodes
     WrongRncHeader = 6,
     WrongRncHeader2 = 7,
     DecryptionKeyRequired = 10,
-    NoRncArchivesWereFound = 11
+    NoRncArchivesWereFound = 11,
 }
 
 public class Program
@@ -85,7 +83,7 @@ public class Program
         0x8801, 0x48C0, 0x4980, 0x8941, 0x4B00, 0x8BC1, 0x8A81, 0x4A40,
         0x4E00, 0x8EC1, 0x8F81, 0x4F40, 0x8D01, 0x4DC0, 0x4C80, 0x8C41,
         0x4400, 0x84C1, 0x8581, 0x4540, 0x8701, 0x47C0, 0x4680, 0x8641,
-        0x8201, 0x42C0, 0x4380, 0x8341, 0x4100, 0x81C1, 0x8081, 0x4040
+        0x8201, 0x42C0, 0x4380, 0x8341, 0x4100, 0x81C1, 0x8081, 0x4040,
     };
 
     private static byte ReadByte(byte[] buf, ref long offset)
@@ -148,7 +146,7 @@ public class Program
             DictSize = 0x8000,
             ReadStartOffset = 0,
             InputOffset = 0,
-            OutputOffset = 0
+            OutputOffset = 0,
         };
     }
 
@@ -254,6 +252,7 @@ public class Program
                     WriteDecodedByte(v, (byte)((v.EncKey ^ ReadSourceByte(v)) & 0xFF));
                     RorW(ref v.EncKey);
                     v.ProcessedSize++;
+                    break; // Exit the inner while loop
                 }
                 else
                 {
@@ -263,33 +262,23 @@ public class Program
                         {
                             if (InputBitsM2(v, 1) != 0)
                             {
-                                DecodeMatchOffset(v);
-                                v.MatchCount = 2;
+                                v.MatchCount = (ushort)(ReadSourceByte(v) + 8);
+                                if (v.MatchCount == 8)
+                                {
+                                    InputBitsM2(v, 1);
+                                    break; // Exit the inner while loop
+                                }
                             }
                             else
                             {
                                 v.MatchCount = 3;
-                                v.MatchOffset = (ushort)(ReadSourceByte(v) + 1);
                             }
+                            DecodeMatchOffset(v);
                         }
                         else
                         {
-                            DecodeMatchCount(v);
-                            if (v.MatchCount != 9)
-                            {
-                                DecodeMatchOffset(v);
-                            }
-                            else
-                            {
-                                uint dataLength = (InputBitsM2(v, 4) << 2) + 12;
-                                v.ProcessedSize += dataLength;
-                                while (dataLength-- > 0)
-                                {
-                                    WriteDecodedByte(v, (byte)((v.EncKey ^ ReadSourceByte(v)) & 0xFF));
-                                    RorW(ref v.EncKey);
-                                }
-                                continue;
-                            }
+                            v.MatchCount = 2;
+                            v.MatchOffset = (ushort)(ReadSourceByte(v) + 1);
                         }
 
                         v.ProcessedSize += v.MatchCount;
@@ -297,6 +286,32 @@ public class Program
                         {
                             byte matchByte = Marshal.ReadByte(v.Window - v.MatchOffset);
                             WriteDecodedByte(v, matchByte);
+                        }
+                        break; // Exit the inner while loop
+                    }
+                    else
+                    {
+                        DecodeMatchCount(v);
+                        if (v.MatchCount != 9)
+                        {
+                            DecodeMatchOffset(v);
+                            v.ProcessedSize += v.MatchCount;
+                            while (v.MatchCount-- > 0)
+                            {
+                                byte matchByte = Marshal.ReadByte(v.Window - v.MatchOffset);
+                                WriteDecodedByte(v, matchByte);
+                            }
+                        }
+                        else
+                        {
+                            uint dataLength = (InputBitsM2(v, 4) << 2) + 12;
+                            v.ProcessedSize += dataLength;
+                            while (dataLength-- > 0)
+                            {
+                                WriteDecodedByte(v, (byte)((v.EncKey ^ ReadSourceByte(v)) & 0xFF));
+                                RorW(ref v.EncKey);
+                            }
+                            break; // Exit the inner while loop
                         }
                     }
                 }
@@ -310,6 +325,7 @@ public class Program
     private static ErrorCodes DoUnpackData(Vars v)
     {
         long startPos = v.InputOffset;
+
         uint sign = ReadDwordBe(v.Input, ref v.InputOffset);
         if (sign >> 8 != RNC_SIGN)
             return ErrorCodes.WrongRncHeader;
@@ -330,8 +346,8 @@ public class Program
 
         v.Mem1 = new byte[0xFFFF];
         v.Decoded = new byte[0xFFFF];
-        v.PackBlockStart = Marshal.AllocHGlobal(0xFFFD);
-        v.Window = Marshal.AllocHGlobal(v.DictSize);
+        v.PackBlockStart = IntPtr.Zero;
+        v.Window = IntPtr.Zero;
 
         v.UnpackedCrcReal = 0;
         v.BitCount = 0;
@@ -343,13 +359,10 @@ public class Program
         ErrorCodes errorCode = 0;
         InputBitsM2(v, 1);
 
-        if (errorCode == 0)
-        {
-            if (InputBitsM2(v, 1) != 0 && v.EncKey == 0) // key is needed, but not specified as argument
-                errorCode = ErrorCodes.DecryptionKeyRequired;
-        }
+        if (InputBitsM2(v, 1) != 0 && v.EncKey == 0) // key is needed, but not specified as argument
+            errorCode = ErrorCodes.DecryptionKeyRequired;
 
-        if (errorCode == 0)
+        if (errorCode == ErrorCodes.None)
         {
             switch (v.Method)
             {
@@ -363,7 +376,7 @@ public class Program
 
         v.InputOffset = startPos + v.PackedSize + RNC_HEADER_SIZE;
 
-        if (errorCode != 0)
+        if (errorCode != ErrorCodes.None)
             return errorCode;
 
         if (v.UnpackedCrc != v.UnpackedCrcReal)
