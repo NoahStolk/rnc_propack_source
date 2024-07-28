@@ -212,6 +212,7 @@ public static class RncUnpacker
                 v.MatchOffset = (ushort)(InputBitsM2(v, 1) + 2);
             }
         }
+        
         v.MatchOffset = (ushort)((v.MatchOffset << 8 | ReadSourceByte(v)) + 1);
     }
 
@@ -300,7 +301,7 @@ public static class RncUnpacker
             }
         }
 
-        WriteBuf(v.Output, ref v.OutputOffset, v.Decoded, v.Window.ToInt32() - v.DictSize);
+        WriteBuf(v.Output, ref v.OutputOffset, v.Decoded[v.DictSize..], v.Window.ToInt32() - v.DictSize);
         return 0;
     }
 
