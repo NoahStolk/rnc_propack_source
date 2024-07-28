@@ -204,18 +204,17 @@ public static class RncUnpacker
             v.MatchOffset = (ushort)InputBitsM2(v, 1);
             if (InputBitsM2(v, 1) == 1)
             {
-                v.MatchOffset = (ushort)((v.MatchOffset << 1) | InputBitsM2(v, 1) | 4);
+                v.MatchOffset = (ushort)(v.MatchOffset << 1 | InputBitsM2(v, 1) | 4);
+
                 if (InputBitsM2(v, 1) == 0)
-                {
-                    v.MatchOffset = (ushort)((v.MatchOffset << 1) | InputBitsM2(v, 1));
-                }
+                    v.MatchOffset = (ushort)(v.MatchOffset << 1 | InputBitsM2(v, 1));
             }
             else if (v.MatchOffset == 0)
             {
                 v.MatchOffset = (ushort)(InputBitsM2(v, 1) + 2);
             }
         }
-        v.MatchOffset = (ushort)((v.MatchOffset << 8) | ReadSourceByte(v) + 1);
+        v.MatchOffset = (ushort)((v.MatchOffset << 8 | ReadSourceByte(v)) + 1);
     }
 
     private static void WriteDecodedByte(Vars v, byte b)
