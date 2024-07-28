@@ -200,7 +200,6 @@ vars_t* init_vars(void)
     v->unpacked_crc_real = 0;
     v->pack_block_size = 0x3000;
     v->dict_size = 0x8000;
-    v->method = 1;
     v->puse_mode = 'u';
 
     v->read_start_offset = 0;
@@ -215,63 +214,6 @@ vars_t* init_vars(void)
     memset(v->len_table, 0, sizeof(v->len_table));
 
     return v;
-}
-
-void clear_table(huftable_t* data, const int count)
-{
-    for (int i = 0; i < count; ++i)
-    {
-        data[i].l1 = 0;
-        data[i].l2 = 0xFFFF;
-        data[i].l3 = 0;
-        data[i].bit_depth = 0;
-    }
-}
-
-uint32 inverse_bits(uint32 value, int count)
-{
-    int i = 0;
-    while (count--)
-    {
-        i <<= 1;
-
-        if (value & 1)
-            i |= 1;
-
-        value >>= 1;
-    }
-
-    return i;
-}
-
-void proc_20(huftable_t* data, const int count)
-{
-    int val = 0;
-    uint32 div = 0x80000000;
-    int bits_count = 1;
-
-    while (bits_count <= 16)
-    {
-        int i = 0;
-
-        while (1)
-        {
-            if (i >= count)
-            {
-                bits_count++;
-                div >>= 1;
-                break;
-            }
-
-            if (data[i].bit_depth == bits_count)
-            {
-                data[i].l3 = inverse_bits(val / div, bits_count);
-                val += div;
-            }
-
-            i++;
-        }
-    }
 }
 
 uint8 read_source_byte(vars_t* v)
@@ -326,38 +268,8 @@ uint32 input_bits_m2(vars_t* v, short count)
     return bits;
 }
 
-uint32 input_bits_m1(vars_t* v, short count)
-{
-    uint32 bits = 0;
-    uint32 prev_bits = 1;
-
-    while (count--)
-    {
-        if (!v->bit_count)
-        {
-            const uint8 b1 = read_source_byte(v);
-            const uint8 b2 = read_source_byte(v);
-            v->bit_buffer = v->pack_block_start[1] << 24 | v->pack_block_start[0] << 16 | b2 << 8 | b1;
-
-            v->bit_count = 16;
-        }
-
-        if (v->bit_buffer & 1)
-            bits |= prev_bits;
-
-        v->bit_buffer >>= 1;
-        prev_bits <<= 1;
-        v->bit_count--;
-    }
-
-    return bits;
-}
-
 uint32 input_bits(vars_t* v, const short count)
 {
-    if (v->method != 2)
-        return input_bits_m1(v, count);
-
     return input_bits_m2(v, count);
 }
 
@@ -480,85 +392,6 @@ int unpack_data_m2(vars_t* v)
     return 0;
 }
 
-void make_huftable(vars_t* v, huftable_t* data, const int count)
-{
-    clear_table(data, count);
-
-    int leaf_nodes = input_bits_m1(v, 5);
-
-    if (leaf_nodes)
-    {
-        if (leaf_nodes > 16)
-            leaf_nodes = 16;
-
-        for (int i = 0; i < leaf_nodes; ++i)
-            data[i].bit_depth = input_bits_m1(v, 4);
-
-        proc_20(data, leaf_nodes);
-    }
-}
-
-uint32 decode_table_data(vars_t* v, const huftable_t* data)
-{
-    uint32 i = 0;
-
-    while (1)
-    {
-        if (data[i].bit_depth && data[i].l3 == (v->bit_buffer & (1 << data[i].bit_depth) - 1))
-        {
-            input_bits_m1(v, data[i].bit_depth);
-
-            if (i < 2)
-                return i;
-
-            return input_bits_m1(v, i - 1) | 1 << i - 1;
-        }
-
-        i++;
-    }
-}
-
-int unpack_data_m1(vars_t* v)
-{
-    while (v->processed_size < v->input_size)
-    {
-        make_huftable(v, v->raw_table, _countof(v->raw_table));
-        make_huftable(v, v->len_table, _countof(v->len_table));
-        make_huftable(v, v->pos_table, _countof(v->pos_table));
-
-        int subchunks = input_bits_m1(v, 16);
-
-        while (subchunks--)
-        {
-            uint32 data_length = decode_table_data(v, v->raw_table);
-            v->processed_size += data_length;
-
-            if (data_length)
-            {
-                while (data_length--)
-                    write_decoded_byte(v, (v->enc_key ^ read_source_byte(v)) & 0xFF);
-
-                ror_w(&v->enc_key);
-
-                v->bit_buffer = (v->pack_block_start[2] << 16 | v->pack_block_start[1] << 8 | v->pack_block_start[0]) << v->bit_count | v->bit_buffer & (1 << v->bit_count) - 1;
-            }
-
-            if (subchunks)
-            {
-                v->match_offset = decode_table_data(v, v->len_table) + 1;
-                v->match_count = decode_table_data(v, v->pos_table) + 2;
-                v->processed_size += v->match_count;
-
-                while (v->match_count--)
-                    write_decoded_byte(v, v->window[-v->match_offset]);
-            }
-        }
-    }
-
-    write_buf(v->output, &v->output_offset, &v->decoded[v->dict_size], v->window - &v->decoded[v->dict_size]);
-    return 0;
-}
-
 int do_unpack_data(vars_t* v)
 {
     const int start_pos = v->input_offset;
@@ -606,7 +439,6 @@ int do_unpack_data(vars_t* v)
     {
         switch (v->method)
         {
-        case 1: error_code = unpack_data_m1(v); break;
         case 2: error_code = unpack_data_m2(v); break;
         }
     }
