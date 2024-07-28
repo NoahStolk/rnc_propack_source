@@ -227,11 +227,6 @@ uint32 input_bits_m2(vars_t* v, short count)
     return bits;
 }
 
-uint32 input_bits(vars_t* v, const short count)
-{
-    return input_bits_m2(v, count);
-}
-
 void decode_match_count(vars_t* v)
 {
     v->match_count = input_bits_m2(v, 1) + 4;
@@ -388,11 +383,11 @@ enum error_codes do_unpack_data(vars_t* v)
     const uint16 specified_key = v->enc_key;
 
     enum error_codes error_code = 0;
-    input_bits(v, 1);
+    input_bits_m2(v, 1);
 
     if (!error_code)
     {
-        if (input_bits(v, 1) && !v->enc_key) // key is needed, but not specified as argument
+        if (input_bits_m2(v, 1) && !v->enc_key) // key is needed, but not specified as argument
             error_code = error_decryption_key_required;
     }
 
@@ -427,7 +422,7 @@ enum error_codes do_unpack(vars_t* v)
     if (v->file_size < RNC_HEADER_SIZE)
         return 6;
 
-    return do_unpack_data(v); // data
+    return do_unpack_data(v);
 }
 
 int main(int argc, char* argv[])
