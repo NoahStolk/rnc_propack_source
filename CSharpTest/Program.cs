@@ -129,22 +129,38 @@ public static class RncUnpacker
             DictSize = 0x8000,
             ReadStartOffset = 0,
             InputOffset = 0,
-            OutputOffset = 0
+            OutputOffset = 0,
         };
     }
 
+    private static int _writtenDebug;
+
     private static byte ReadSourceByte(Vars v)
     {
-        if (v.Mem1.Length == 0)
+        if (v.PackBlockStart.ToInt32() == 0xFFFD)
         {
             int leftSize = (int)(v.FileSize - v.InputOffset);
             int sizeToRead = Math.Min(leftSize, 0xFFFD);
-            v.Mem1 = new byte[sizeToRead];
+
+            v.PackBlockStart = IntPtr.Zero;
             Array.Copy(v.Input, v.InputOffset, v.Mem1, 0, sizeToRead);
             v.InputOffset += sizeToRead;
+
+            if (leftSize - sizeToRead > 2)
+                leftSize = 2;
+            else
+                leftSize -= sizeToRead;
+
+            Array.Copy(v.Input, v.InputOffset, v.Mem1, sizeToRead, leftSize);
+            v.InputOffset -= leftSize;
         }
-        byte result = v.Mem1[0];
-        v.Mem1 = v.Mem1[1..];
+
+        byte result = v.Mem1[v.PackBlockStart.ToInt32()];
+        v.PackBlockStart = (IntPtr)(v.PackBlockStart.ToInt32() + 1);
+
+        if (_writtenDebug++ < 10)
+            Console.WriteLine($"Read byte: {result:X2}");
+
         return result;
     }
 
@@ -158,10 +174,16 @@ public static class RncUnpacker
                 v.BitBuffer = ReadSourceByte(v);
                 v.BitCount = 8;
             }
-            bits = (bits << 1) | (uint)((v.BitBuffer & 0x80) != 0 ? 1 : 0);
+
+            bits <<= 1;
+            
+            if ((v.BitBuffer & 0x80) != 0)
+                bits |= 1;
+            
             v.BitBuffer <<= 1;
             v.BitCount--;
         }
+        
         return bits;
     }
 
@@ -240,6 +262,7 @@ public static class RncUnpacker
                             {
                                 v.MatchCount = 3;
                             }
+                            
                             DecodeMatchOffset(v);
                         }
                         else
@@ -247,38 +270,38 @@ public static class RncUnpacker
                             v.MatchCount = 2;
                             v.MatchOffset = (ushort)(ReadSourceByte(v) + 1);
                         }
+                        
                         v.ProcessedSize += v.MatchCount;
+                        
                         while (v.MatchCount-- > 0)
-                        {
                             WriteDecodedByte(v, v.Decoded[v.Window.ToInt32() - v.MatchOffset]);
-                        }
                     }
                     else
                     {
                         DecodeMatchCount(v);
+                        
                         if (v.MatchCount != 9)
                         {
                             DecodeMatchOffset(v);
                             v.ProcessedSize += v.MatchCount;
                             while (v.MatchCount-- > 0)
-                            {
                                 WriteDecodedByte(v, v.Decoded[v.Window.ToInt32() - v.MatchOffset]);
-                            }
                         }
                         else
                         {
                             uint dataLength = (InputBitsM2(v, 4) << 2) + 12;
                             v.ProcessedSize += dataLength;
+
                             while (dataLength-- > 0)
-                            {
                                 WriteDecodedByte(v, (byte)((v.EncKey ^ ReadSourceByte(v)) & 0xFF));
-                            }
+
                             RorW(ref v.EncKey);
                         }
                     }
                 }
             }
         }
+
         WriteBuf(v.Output, ref v.OutputOffset, v.Decoded, v.Window.ToInt32() - v.DictSize);
         return 0;
     }
@@ -308,7 +331,7 @@ public static class RncUnpacker
         }
         v.Mem1 = new byte[0xFFFF];
         v.Decoded = new byte[0xFFFF];
-        v.PackBlockStart = IntPtr.Zero;
+        v.PackBlockStart = 0xFFFD;
         v.Window = (IntPtr)v.DictSize;
         v.UnpackedCrcReal = 0;
         v.BitCount = 0;
