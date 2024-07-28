@@ -24,79 +24,37 @@ typedef unsigned char uint8;
 typedef unsigned short uint16;
 typedef unsigned int uint32;
 
-#pragma pack(push, 1)
-typedef struct huftable_s
-{
-    uint32 l1; // +0
-    uint16 l2; // +4
-    uint32 l3; // +6
-    uint16 bit_depth; // +A
-} huftable_t;
-
-#pragma pack(pop)
-
 typedef struct vars_s
 {
-    uint16 max_matches;
     uint16 enc_key;
-    uint32 pack_block_size;
     uint16 dict_size;
     uint32 method;
-    uint32 puse_mode;
     uint32 input_size;
     uint32 file_size;
 
     // inner
-    uint32 bytes_left;
     uint32 packed_size;
     uint32 processed_size;
-    uint32 v7;
-    uint32 pack_block_pos;
-    uint16 pack_token;
     uint16 bit_count;
-    uint16 v11;
-    uint16 last_min_offset;
-    uint32 v17;
-    uint32 pack_block_left_size;
     uint16 match_count;
     uint16 match_offset;
-    uint32 v20;
-    uint32 v21;
     uint32 bit_buffer;
 
-    uint32 unpacked_size;
-    uint32 rnc_data_size;
     uint16 unpacked_crc;
     uint16 unpacked_crc_real;
     uint16 packed_crc;
-    uint32 leeway;
-    uint32 chunks_count;
 
     uint8* mem1;
     uint8* pack_block_start;
-    uint8* pack_block_max;
-    uint8* pack_block_end;
-    uint16* mem2;
-    uint16* mem3;
-    uint16* mem4;
-    uint16* mem5;
 
     uint8* decoded;
     uint8* window;
 
     size_t read_start_offset;
-    size_t write_start_offset;
     uint8* input;
     uint8* output;
-    uint8* temp;
     size_t input_offset;
     size_t output_offset;
-    size_t temp_offset;
-
-    uint8 tmp_crc_data[2048];
-    huftable_t raw_table[16];
-    huftable_t pos_table[16];
-    huftable_t len_table[16];
 } vars_t;
 
 #define RNC_SIGN 0x524E43 // RNC
@@ -196,22 +154,12 @@ vars_t* init_vars(void)
 {
     vars_t* v = malloc(sizeof(vars_t));
     v->enc_key = 0;
-    v->max_matches = 0x1000;
     v->unpacked_crc_real = 0;
-    v->pack_block_size = 0x3000;
     v->dict_size = 0x8000;
-    v->puse_mode = 'u';
 
     v->read_start_offset = 0;
-    v->write_start_offset = 0;
     v->input_offset = 0;
     v->output_offset = 0;
-    v->temp_offset = 0;
-
-    memset(v->tmp_crc_data, 0, sizeof(v->tmp_crc_data));
-    memset(v->raw_table, 0, sizeof(v->raw_table));
-    memset(v->pos_table, 0, sizeof(v->pos_table));
-    memset(v->len_table, 0, sizeof(v->len_table));
 
     return v;
 }
@@ -491,7 +439,6 @@ int main(int argc, char* argv[])
     fclose(in);
 
     v->output = (uint8*)malloc(MAX_BUF_SIZE);
-    v->temp = (uint8*)malloc(MAX_BUF_SIZE);
 
     const int error_code = do_unpack(v);
     if (!error_code)
@@ -501,7 +448,6 @@ int main(int argc, char* argv[])
         {
             free(v->input);
             free(v->output);
-            free(v->temp);
             free(v);
             printf("Cannot create output file!\n");
             return -1;
@@ -510,9 +456,9 @@ int main(int argc, char* argv[])
         fwrite(v->output, v->output_offset, 1, out);
         fclose(out);
 
-        printf("File successfully %s!\n", v->puse_mode == 'p' ? "packed" : "unpacked");
+        printf("File successfully %s!\n", "unpacked");
         printf("Original/new size: %d/%zd bytes\n",
-               v->puse_mode == 'u' ? v->packed_size + RNC_HEADER_SIZE : v->file_size, v->output_offset);
+               v->packed_size + RNC_HEADER_SIZE, v->output_offset);
     }
     else
     {
@@ -536,7 +482,6 @@ int main(int argc, char* argv[])
 
     free(v->input);
     free(v->output);
-    free(v->temp);
     free(v);
 
     return error_code;
