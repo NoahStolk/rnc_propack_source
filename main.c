@@ -438,7 +438,7 @@ int main(int argc, char* argv[])
 {
     argv[1] = "u";
     argv[2] = "E:\\repos-external\\rnc_propack_source\\CRATES.GSC";
-    argv[3] = "E:\\repos-external\\rnc_propack_source\\CRATES.NUS";
+    argv[3] = "E:\\repos-external\\rnc_propack_source\\CRATES_C.NUS";
 
     vars_t* v = init_vars();
     FILE* in = fopen(argv[2], "rb");

@@ -222,7 +222,7 @@ public static class RncUnpacker
     {
         if (v.Window.ToInt32() == 0xFFFF)
         {
-            WriteBuf(v.Output, ref v.OutputOffset, v.Decoded, 0xFFFF - v.DictSize);
+            WriteBuf(v.Output, ref v.OutputOffset, v.Decoded[v.DictSize..], 0xFFFF - v.DictSize);
             Array.Copy(v.Decoded, 0xFFFF - v.DictSize, v.Decoded, 0, v.DictSize);
             v.Window = (IntPtr)v.DictSize;
         }
@@ -380,7 +380,7 @@ public static class RncUnpacker
 
     public static void Main(string[] args)
     {
-        args = new string[] { "u", "E:\\repos-external\\rnc_propack_source\\CRATES.GSC", "E:\\repos-external\\rnc_propack_source\\CRATES.NUS" };
+        args = ["u", "E:\\repos-external\\rnc_propack_source\\CRATES.GSC", "E:\\repos-external\\rnc_propack_source\\CRATES_CS.NUS"];
         Vars v = InitVars();
         v.ReadStartOffset = 0;
         v.InputOffset = 0;
