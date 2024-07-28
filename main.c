@@ -52,18 +52,22 @@ typedef struct vars_s
     uint32 processed_size;
     uint32 v7;
     uint32 pack_block_pos;
-    uint16 pack_token, bit_count, v11;
+    uint16 pack_token;
+    uint16 bit_count;
+    uint16 v11;
     uint16 last_min_offset;
     uint32 v17;
     uint32 pack_block_left_size;
     uint16 match_count;
     uint16 match_offset;
-    uint32 v20, v21;
+    uint32 v20;
+    uint32 v21;
     uint32 bit_buffer;
 
     uint32 unpacked_size;
     uint32 rnc_data_size;
-    uint16 unpacked_crc, unpacked_crc_real;
+    uint16 unpacked_crc;
+    uint16 unpacked_crc_real;
     uint16 packed_crc;
     uint32 leeway;
     uint32 chunks_count;
@@ -80,9 +84,14 @@ typedef struct vars_s
     uint8* decoded;
     uint8* window;
 
-    size_t read_start_offset, write_start_offset;
-    uint8 *input, *output, *temp;
-    size_t input_offset, output_offset, temp_offset;
+    size_t read_start_offset;
+    size_t write_start_offset;
+    uint8* input;
+    uint8* output;
+    uint8* temp;
+    size_t input_offset;
+    size_t output_offset;
+    size_t temp_offset;
 
     uint8 tmp_crc_data[2048];
     huftable_t raw_table[16];
