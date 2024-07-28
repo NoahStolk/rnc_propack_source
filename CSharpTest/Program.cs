@@ -143,15 +143,14 @@ public static class RncUnpacker
             int sizeToRead = Math.Min(leftSize, 0xFFFD);
 
             v.PackBlockStart = IntPtr.Zero;
-            Array.Copy(v.Input, v.InputOffset, v.Mem1, 0, sizeToRead);
-            v.InputOffset += sizeToRead;
+            ReadBuf(v.Mem1, v.Input, ref v.InputOffset, sizeToRead);
 
             if (leftSize - sizeToRead > 2)
                 leftSize = 2;
             else
                 leftSize -= sizeToRead;
 
-            Array.Copy(v.Input, v.InputOffset, v.Mem1, sizeToRead, leftSize);
+            ReadBuf(v.Mem1[sizeToRead..], v.Input, ref v.InputOffset, leftSize);
             v.InputOffset -= leftSize;
         }
 
@@ -190,19 +189,18 @@ public static class RncUnpacker
     private static void DecodeMatchCount(Vars v)
     {
         v.MatchCount = (ushort)(InputBitsM2(v, 1) + 4);
-        if (InputBitsM2(v, 1) == 1)
-        {
-            v.MatchCount = (ushort)(((v.MatchCount - 1) << 1) + InputBitsM2(v, 1));
-        }
+
+        if (InputBitsM2(v, 1) != 0)
+            v.MatchCount = (ushort)((v.MatchCount - 1 << 1) + InputBitsM2(v, 1));
     }
 
     private static void DecodeMatchOffset(Vars v)
     {
         v.MatchOffset = 0;
-        if (InputBitsM2(v, 1) == 1)
+        if (InputBitsM2(v, 1) != 0)
         {
             v.MatchOffset = (ushort)InputBitsM2(v, 1);
-            if (InputBitsM2(v, 1) == 1)
+            if (InputBitsM2(v, 1) != 0)
             {
                 v.MatchOffset = (ushort)(v.MatchOffset << 1 | InputBitsM2(v, 1) | 4);
 
@@ -222,12 +220,13 @@ public static class RncUnpacker
         if (v.Window.ToInt32() == 0xFFFF)
         {
             WriteBuf(v.Output, ref v.OutputOffset, v.Decoded[v.DictSize..], 0xFFFF - v.DictSize);
-            Array.Copy(v.Decoded, 0xFFFF - v.DictSize, v.Decoded, 0, v.DictSize);
+            Array.Copy(v.Decoded, v.Window - v.DictSize, v.Decoded, 0, v.DictSize);
             v.Window = (IntPtr)v.DictSize;
         }
+
         v.Decoded[v.Window.ToInt32()] = b;
         v.Window += 1;
-        v.UnpackedCrcReal = (ushort)(CrcTable[(v.UnpackedCrcReal ^ b) & 0xFF] ^ (v.UnpackedCrcReal >> 8));
+        v.UnpackedCrcReal = (ushort)(CrcTable[(v.UnpackedCrcReal ^ b) & 0xFF] ^ v.UnpackedCrcReal >> 8);
     }
 
     private static int UnpackDataM2(Vars v)
@@ -244,11 +243,11 @@ public static class RncUnpacker
                 }
                 else
                 {
-                    if (InputBitsM2(v, 1) == 1)
+                    if (InputBitsM2(v, 1) != 0)
                     {
-                        if (InputBitsM2(v, 1) == 1)
+                        if (InputBitsM2(v, 1) != 0)
                         {
-                            if (InputBitsM2(v, 1) == 1)
+                            if (InputBitsM2(v, 1) != 0)
                             {
                                 v.MatchCount = (ushort)(ReadSourceByte(v) + 8);
                                 if (v.MatchCount == 8)
