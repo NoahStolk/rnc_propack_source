@@ -23,10 +23,10 @@ public class Vars
     public ushort PackedCrc;
 
     public byte[] Mem1;
-    public byte[] PackBlockStart;
+    public IntPtr PackBlockStart;
 
     public byte[] Decoded;
-    public byte[] Window;
+    public IntPtr Window;
 
     public long ReadStartOffset;
     public byte[] Input;
@@ -154,13 +154,13 @@ public class Program
 
     private static byte ReadSourceByte(Vars v)
     {
-        if (v.PackBlockStart == v.Mem1[0xFFFD])
+        if (v.PackBlockStart == IntPtr.Zero)
         {
             int leftSize = (int)(v.FileSize - v.InputOffset);
             int sizeToRead = leftSize <= 0xFFFD ? leftSize : 0xFFFD;
 
-            v.PackBlockStart = v.Mem1;
-            ReadBuf(v.PackBlockStart, v.Input, ref v.InputOffset, sizeToRead);
+            v.Mem1 = new byte[sizeToRead];
+            ReadBuf(v.Mem1, v.Input, ref v.InputOffset, sizeToRead);
 
             if (leftSize - sizeToRead > 2)
                 leftSize = 2;
@@ -169,9 +169,14 @@ public class Program
 
             ReadBuf(v.Mem1, v.Input, ref v.InputOffset, leftSize);
             v.InputOffset -= leftSize;
+
+            v.PackBlockStart = Marshal.AllocHGlobal(sizeToRead);
+            Marshal.Copy(v.Mem1, 0, v.PackBlockStart, sizeToRead);
         }
 
-        return v.PackBlockStart[0];
+        byte result = Marshal.ReadByte(v.PackBlockStart);
+        v.PackBlockStart += 1;
+        return result;
     }
 
     private static uint InputBitsM2(Vars v, short count)
@@ -224,14 +229,17 @@ public class Program
 
     private static void WriteDecodedByte(Vars v, byte b)
     {
-        if (v.Window == v.Decoded[0xFFFF])
+        if (v.Window == IntPtr.Zero)
         {
             WriteBuf(v.Output, ref v.OutputOffset, v.Decoded, 0xFFFF - v.DictSize);
-            Buffer.BlockCopy(v.Decoded, v.Window - v.DictSize, v.Decoded, 0, v.DictSize);
-            v.Window = v.Decoded[v.DictSize];
+            Buffer.BlockCopy(v.Decoded, v.Decoded.Length - v.DictSize, v.Decoded, 0, v.DictSize);
+
+            v.Window = Marshal.AllocHGlobal(v.DictSize);
+            Marshal.Copy(v.Decoded, v.Decoded.Length - v.DictSize, v.Window, v.DictSize);
         }
 
-        v.Window[v.Window++] = b;
+        Marshal.WriteByte(v.Window, b);
+        v.Window += 1;
         v.UnpackedCrcReal = (ushort)(CrcTable[(v.UnpackedCrcReal ^ b) & 0xFF] ^ v.UnpackedCrcReal >> 8);
     }
 
@@ -255,54 +263,47 @@ public class Program
                         {
                             if (InputBitsM2(v, 1) != 0)
                             {
-                                v.MatchCount = (ushort)(ReadSourceByte(v) + 8);
-                                if (v.MatchCount == 8)
-                                {
-                                    InputBitsM2(v, 1);
-                                    break;
-                                }
+                                DecodeMatchOffset(v);
+                                v.MatchCount = 2;
                             }
                             else
                             {
                                 v.MatchCount = 3;
+                                v.MatchOffset = (ushort)(ReadSourceByte(v) + 1);
                             }
-
-                            DecodeMatchOffset(v);
                         }
                         else
                         {
-                            v.MatchCount = 2;
-                            v.MatchOffset = (ushort)(ReadSourceByte(v) + 1);
+                            DecodeMatchCount(v);
+                            if (v.MatchCount != 9)
+                            {
+                                DecodeMatchOffset(v);
+                            }
+                            else
+                            {
+                                uint dataLength = (InputBitsM2(v, 4) << 2) + 12;
+                                v.ProcessedSize += dataLength;
+                                while (dataLength-- > 0)
+                                {
+                                    WriteDecodedByte(v, (byte)((v.EncKey ^ ReadSourceByte(v)) & 0xFF));
+                                    RorW(ref v.EncKey);
+                                }
+                                continue;
+                            }
                         }
 
                         v.ProcessedSize += v.MatchCount;
                         while (v.MatchCount-- > 0)
-                            WriteDecodedByte(v, v.Window[v.Window - v.MatchOffset]);
-                    }
-                    else
-                    {
-                        DecodeMatchCount(v);
-                        if (v.MatchCount != 9)
                         {
-                            DecodeMatchOffset(v);
-                            v.ProcessedSize += v.MatchCount;
-                            while (v.MatchCount-- > 0)
-                                WriteDecodedByte(v, v.Window[v.Window - v.MatchOffset]);
-                        }
-                        else
-                        {
-                            uint dataLength = (InputBitsM2(v, 4) << 2) + 12;
-                            v.ProcessedSize += dataLength;
-                            while (dataLength-- > 0)
-                                WriteDecodedByte(v, (byte)((v.EncKey ^ ReadSourceByte(v)) & 0xFF));
-                            RorW(ref v.EncKey);
+                            byte matchByte = Marshal.ReadByte(v.Window - v.MatchOffset);
+                            WriteDecodedByte(v, matchByte);
                         }
                     }
                 }
             }
         }
 
-        WriteBuf(v.Output, ref v.OutputOffset, v.Decoded, v.Window - v.Decoded[v.DictSize]);
+        WriteBuf(v.Output, ref v.OutputOffset, v.Decoded, 0xFFFF - v.DictSize);
         return 0;
     }
 
@@ -329,8 +330,8 @@ public class Program
 
         v.Mem1 = new byte[0xFFFF];
         v.Decoded = new byte[0xFFFF];
-        v.PackBlockStart = v.Mem1[0xFFFD];
-        v.Window = v.Decoded[v.DictSize];
+        v.PackBlockStart = Marshal.AllocHGlobal(0xFFFD);
+        v.Window = Marshal.AllocHGlobal(v.DictSize);
 
         v.UnpackedCrcReal = 0;
         v.BitCount = 0;
@@ -442,6 +443,13 @@ public class Program
         catch (Exception ex)
         {
             Console.WriteLine($"Error: {ex.Message}");
+        }
+        finally
+        {
+            if (v.PackBlockStart != IntPtr.Zero)
+                Marshal.FreeHGlobal(v.PackBlockStart);
+            if (v.Window != IntPtr.Zero)
+                Marshal.FreeHGlobal(v.Window);
         }
     }
 }
