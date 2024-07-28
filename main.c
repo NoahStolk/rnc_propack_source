@@ -175,8 +175,6 @@ vars_t* init_vars(void)
     return v;
 }
 
-int debug_count = 0;
-
 uint8 read_source_byte(vars_t* v)
 {
     if (v->pack_block_start == &v->mem1[0xFFFD])
@@ -202,14 +200,7 @@ uint8 read_source_byte(vars_t* v)
         v->input_offset -= left_size;
     }
 
-    //return *v->pack_block_start++;
-    const uint8 result = *v->pack_block_start;
-    v->pack_block_start++;
-
-    if (debug_count++ < 10)
-        printf("read_source_byte: %x\n", result);
-    
-    return result;
+    return *v->pack_block_start++;
 }
 
 uint32 input_bits_m2(vars_t* v, short count)
